@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html style="height: 100%; overflow: hidden;">
+<head>
+    <style>
+        :root { --mcd-red: #DA291C; --mcd-yellow: #FFC72C; --dark: #333; }
+        body { font-family: 'Impact', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Android Emoji', sans-serif; background: var(--mcd-red); height: 100vh; margin: 0; color: white; display: flex; flex-direction: column; overflow: hidden; }
+        #landingPage { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #b31b12, #DA291C); }
+        .controls-top-right { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
+        .fs-btn, .mute-btn { background: rgba(255,255,255,0.2); font-size: 1.5rem; padding: 10px; border: none; border-radius: 8px; cursor: pointer; color: white; }
+        .title-text { font-size: 7rem; color: #FFC72C; text-shadow: 6px 6px 0px #000; margin-bottom: 20px; transform: rotate(-3deg); text-transform: uppercase; }
+        .setup-card { background: white; color: var(--dark); padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); width: 350px; }
+        .input-group { margin: 10px 0; font-size: 1rem; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        .checkbox-group { display: flex; justify-content: space-between; margin: 10px 0; font-size: 0.9rem; }
+        #gameContainer { display: none; height: 100vh; flex-direction: column; position: relative; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: rgba(0,0,0,0.1); }
+        .top-bar .controls { display: flex; gap: 10px; }
+        .top-bar button { background: rgba(255,255,255,0.2); font-size: 1.2rem; padding: 5px 15px; border: none; border-radius: 8px; cursor: pointer; color: white; }
+        .arena { display: flex; flex: 1; padding: 10px; gap: 10px; overflow: hidden; }
+        .player-side { flex: 1; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.1); padding: 10px; border-radius: 15px; overflow: hidden; }
+        .player-header { text-align: center; font-size: 1.8rem; }
+        .order-box { background: white; color: black; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 1.3rem; min-height: 70px; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .menu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: rgba(255,255,255,0.1); padding: 8px; border-radius: 8px; }
+        .menu-item { font-size: 35px; background: white; padding: 6px; border-radius: 6px; cursor: grab; text-align: center; color: black; user-select: none; }
+        .tray { height: 120px; border: 4px dashed white; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 5px; padding: 5px; align-content: start; overflow-y: auto; }
+        .btn-row { display: flex; gap: 5px; margin-top: 5px; }
+        .btn-row button { flex: 1; padding: 12px; font-weight: 900; cursor: pointer; border: none; border-radius: 6px; background: var(--mcd-yellow); font-size: 1.1rem; }
+        #gameOverOverlay { display: none; position: absolute; top:0; left:0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+    </style>
+</head>
+<body>
+
+    <div id="landingPage">
+        <div class="controls-top-right">
+            <button class="mute-btn" id="muteBtnLanding" onclick="toggleMute()">🔊</button>
+            <button class="fs-btn" onclick="toggleFullscreen()">⛶</button>
+        </div>
+        <div class="title-text">KITCHEN DASH!</div>
+        <div class="setup-card">
+            <div class="input-group">Time (sec): <input type="number" id="setTime" value="60"></div>
+            <div class="input-group">Players: <input type="number" id="numPlayers" value="2" min="1" max="3"></div>
+            <div class="checkbox-group">
+                <label><input type="checkbox" id="catMains" checked> Mains</label>
+                <label><input type="checkbox" id="catSides" checked> Sides</label>
+                <label><input type="checkbox" id="catDrinks" checked> Drinks</label>
+            </div>
+            <div class="input-group">Order Type: <select id="orderMode"><option value="random">Random</option><option value="uniform">Same for All</option></select></div>
+            <button onclick="startApp()" style="width: 100%; background: var(--mcd-red); color: white; font-size: 1.3rem; margin-top: 10px;">START GAME</button>
+        </div>
+    </div>
+
+    <div id="gameContainer">
+        <div id="gameOverOverlay">
+            <h1 id="winnerTitle" style="color: var(--mcd-yellow);"></h1>
+            <button onclick="backToMenu()" style="padding: 15px 30px; font-size: 1.5rem;">PLAY AGAIN</button>
+        </div>
+        <div class="top-bar">
+            <button onclick="backToMenu()">⬅</button>
+            <div class="controls">
+                <button id="pauseBtn" onclick="togglePause()">⏸</button>
+                <button id="muteBtnGame" onclick="toggleMute()">🔊</button>
+                <button onclick="toggleFullscreen()">⛶</button>
+            </div>
+        </div>
+        <div class="arena" id="arena"></div>
+    </div>
+
+    <audio id="bgMusic" loop src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"></audio>
+
+    <script>
+        let gameInterval, isMuted = false, isPaused = false, state = {}, startTime;
+        const menuData = {
+            'Mains': { 'pizza': '🍕', 'burger': '🍔', 'hotdog': '🌭', 'sandwich': '🥪', 'taco': '🌮', 'spaghetti': '🍝', 'noodles': '🍜', 'fried chicken': '🍗' },
+            'Sides': { 'cake': '🍰', 'ice cream': '🍦', 'soup': '🥣', 'waffle': '🧇', 'pancakes': '🥞' },
+            'Drinks': { 'coffee': '☕', 'tea': '🍵', 'soda': '🥤', 'bubble tea': '🧋', 'apple juice': '🧃', 'french fries': '🍟' }
+        };
+
+        function toggleFullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
+        function toggleMute() {
+            const music = document.getElementById('bgMusic');
+            isMuted = !isMuted;
+            music.muted = isMuted;
+            const icon = isMuted ? '🔇' : '🔊';
+            document.getElementById('muteBtnLanding').innerText = icon;
+            document.getElementById('muteBtnGame').innerText = icon;
+        }
+        function togglePause() { isPaused = !isPaused; document.getElementById('pauseBtn').innerText = isPaused ? '▶' : '⏸'; }
+        function backToMenu() { clearInterval(gameInterval); isPaused = false; document.getElementById('gameContainer').style.display = 'none'; document.getElementById('gameOverOverlay').style.display = 'none'; document.getElementById('landingPage').style.display = 'flex'; document.getElementById('arena').innerHTML = ''; }
+
+        function startApp() {
+            const numP = parseInt(document.getElementById('numPlayers').value);
+            const activeMenu = getActiveMenu();
+            if (Object.keys(activeMenu).length === 0) return alert("Select at least one menu category!");
+            
+            document.getElementById('bgMusic').play();
+            state = {}; startTime = Date.now();
+            const arena = document.getElementById('arena');
+            const totalTime = parseInt(document.getElementById('setTime').value);
+
+            for(let i=1; i<=numP; i++) {
+                state[i] = { score: 0, ordersCompleted: 0, timeSpent: 0, tray: [], target: {}, timer: totalTime };
+                arena.innerHTML += `<div class="player-side">
+                    <div class="player-header">Player ${i} | <span id="s${i}">0</span></div>
+                    <div class="p-timer" id="pt${i}">Time: ${totalTime}s</div>
+                    <div class="order-box" id="order${i}"></div>
+                    <div class="menu-grid" id="menu${i}" ondrop="dropMenu(event, ${i})" ondragover="allowDrop(event)"></div>
+                    <div class="tray" id="tray${i}" ondrop="drop(event, ${i})" ondragover="allowDrop(event)"></div>
+                    <div class="btn-row">
+                        <button onclick="clearTray(${i})" style="background: #ccc;">CLEAR</button>
+                        <button onclick="checkOrder(${i})">SERVE</button>
+                    </div>
+                </div>`;
+                const menuEl = document.getElementById(`menu${i}`);
+                Object.entries(activeMenu).forEach(([name, emoji]) => {
+                    menuEl.innerHTML += `<div class="menu-item" draggable="true" ondragstart="drag(event, '${name}', '${emoji}', ${i}, true)">${emoji}</div>`;
+                });
+                generateOrder(i, activeMenu);
+            }
+            document.getElementById('landingPage').style.display = 'none';
+            document.getElementById('gameContainer').style.display = 'flex';
+            runGameLoop();
+        }
+
+        function runGameLoop() {
+            gameInterval = setInterval(() => {
+                if (isPaused) return;
+                let activeGames = 0;
+                for(let i in state) {
+                    if(state[i].timer > 0) {
+                        state[i].timer--;
+                        document.getElementById(`pt${i}`).innerText = `Time: ${state[i].timer}s`;
+                        activeGames++;
+                    }
+                }
+                if(activeGames === 0) {
+                    clearInterval(gameInterval);
+                    let players = Object.keys(state).sort((a,b) => (state[b].ordersCompleted - state[a].ordersCompleted) || (state[a].timeSpent - state[b].timeSpent));
+                    document.getElementById('winnerTitle').innerText = "WINNER: PLAYER " + players[0] + "!";
+                    document.getElementById('gameOverOverlay').style.display = 'flex';
+                }
+            }, 1000);
+        }
+
+        function getActiveMenu() {
+            let active = {};
+            if(document.getElementById('catMains').checked) Object.assign(active, menuData['Mains']);
+            if(document.getElementById('catSides').checked) Object.assign(active, menuData['Sides']);
+            if(document.getElementById('catDrinks').checked) Object.assign(active, menuData['Drinks']);
+            return active;
+        }
+        function generateOrder(pId, menu) {
+            const all = Object.entries(menu);
+            state[pId].target = {};
+            for(let i=0; i<3; i++) {
+                const item = all[Math.floor(Math.random() * all.length)][0];
+                state[pId].target[item] = (state[pId].target[item] || 0) + 1;
+            }
+            updateOrderDisplay(pId);
+        }
+        function updateOrderDisplay(pId) { document.getElementById(`order${pId}`).innerHTML = Object.entries(state[pId].target).map(([name, qty]) => `${name} x${qty}`).join('<br>'); }
+        function drag(e, n, emoji, pId, fromMenu) { e.dataTransfer.setData("n", n); e.dataTransfer.setData("e", emoji); e.dataTransfer.setData("pId", pId); e.dataTransfer.setData("fromMenu", fromMenu); }
+        function allowDrop(e) { e.preventDefault(); }
+        function drop(e, pId) {
+            e.preventDefault();
+            if(e.dataTransfer.getData("fromMenu") == "true" || e.dataTransfer.getData("pId") == pId) {
+                state[pId].tray.push({ n: e.dataTransfer.getData("n"), e: e.dataTransfer.getData("e") });
+                if(e.dataTransfer.getData("fromMenu") == "false") {
+                    let oldId = e.dataTransfer.getData("pId");
+                    state[oldId].tray.splice(state[oldId].tray.findIndex(i => i.n === e.dataTransfer.getData("n")), 1);
+                    renderTray(oldId);
+                }
+                renderTray(pId);
+            }
+        }
+        function dropMenu(e, pId) {
+            e.preventDefault();
+            if(e.dataTransfer.getData("fromMenu") == "false") {
+                let oldId = e.dataTransfer.getData("pId");
+                state[oldId].tray.splice(state[oldId].tray.findIndex(i => i.n === e.dataTransfer.getData("n")), 1);
+                renderTray(oldId);
+            }
+        }
+        function renderTray(pId) { document.getElementById(`tray${pId}`).innerHTML = state[pId].tray.map((item) => `<div class="menu-item" draggable="true" ondragstart="drag(event, '${item.n}', '${item.e}', ${pId}, false)">${item.e}</div>`).join(''); }
+        function clearTray(pId) { state[pId].tray = []; renderTray(pId); }
+        function checkOrder(pId) {
+            const trayCount = {}; state[pId].tray.forEach(i => trayCount[i.n] = (trayCount[i.n] || 0) + 1);
+            let match = Object.keys(state[pId].target).length === Object.keys(trayCount).length && Object.keys(state[pId].target).every(k => trayCount[k] === state[pId].target[k]);
+            if (match) {
+                state[pId].score += 10; state[pId].ordersCompleted += 1;
+                state[pId].timeSpent = (Date.now() - startTime) / 1000;
+                document.getElementById(`s${pId}`).innerText = state[pId].score;
+                state[pId].tray = []; renderTray(pId); generateOrder(pId, getActiveMenu());
+            } else {
+                const box = document.getElementById(`order${pId}`);
+                box.innerText = "TRY AGAIN!";
+                setTimeout(() => updateOrderDisplay(pId), 1000);
+            }
+        }
+    </script>
+</body>
+</html>
